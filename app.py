@@ -133,6 +133,10 @@ uploaded_file = st.file_uploader(
     type=["bin"]
 )
 
+# Advanced option for full dump vs DFU firmware
+advanced_mode = st.checkbox('⚡ Advanced: I\'m patching a full dump (not DFU firmware)')
+
+
 st.subheader("🛴 Scooter Model")
 scooter_model = st.selectbox(
     "Select your model",
@@ -193,7 +197,7 @@ else:
     st.info("No patches selected")
 
 if uploaded_file is not None and patches:
-    if patches[-1] != "chk":
+    if not advanced_mode and patches[-1] != "chk":
         patches.append("chk")
 
     if scooter_model in ["mi5elite"]:

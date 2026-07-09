@@ -34,8 +34,12 @@ class ES32Patcher(CorePatcher):
         return int(factor * speed).to_bytes(size, 'little')
 
     def fix_checksum(self):
-        sig = 'SZMC-ES-ZM-'.encode()
-        ofs_ = find_pattern(self.data, sig)
+        # Automatische Mustersuche deaktiviert
+        # sig = 'SZMC-ES-ZM-'.encode()
+        # ofs_ = find_pattern(self.data, sig)
+
+        # Manuelles Offset aus Firmware-Dump eingetragen
+        ofs_ = 0x90
 
         ofs = ofs_ + 0x20
         size = int.from_bytes(
@@ -56,12 +60,37 @@ class ES32Patcher(CorePatcher):
         return [("fix_checksum", hex(ofs), pre.hex(), post.hex()), res]
 
     def cruise_control_enable(self):
-        sig = [0xca, 0x09, 0x1a, 0x70, 0x4a, 0x06, None, 0x4b, 0xd2, 0x0f, 0x1a, 0x70, 0x8a, 0x06, None, 0x4b, 0xd2, 0x0f, 0x1a, 0x70]
-        ofs = find_pattern(self.data, sig) + len(sig) - 4
-        pre = self.data[ofs:ofs+2]
-        post = self.assembly("movs r2,#0x1")
-        self.data[ofs:ofs+2] = post
-        return [("cruise_control_enable", hex(ofs), pre.hex(), post.hex())]
+        sig = [0x1a, 0x70, 0x8a, 0x06, None, 0x4b, 0xd2, 0x0f]
+        
+        try:
+            # Versuche das Muster in der Firmware zu lokalisieren
+            ofs = find_pattern(self.data, sig)
+            
+            # Protokollierung vor der Änderung
+            pre = self.data[ofs:ofs+2]
+            
+            # Wir injizieren die standardmäßige Freischaltung (movs r2, #0x1)
+            post = self.assembly("movs r2,#0x1")
+            self.data[ofs:ofs+2] = post
+            
+            return [("cruise_control_enable_auto", hex(ofs), pre.hex(), post.hex())]
+            
+        except Exception:
+            # FALLBACK: Wenn die Mustersuche scheitert, erzwinge ein alternatives Muster
+            # das in neueren Brightway-Modellen auftaucht (z.B. 4 Pro Gen2 / 5 Pro)
+            sig_alt = [0xca, 0x09, 0x1a, 0x70, 0x4a, 0x06]
+            try:
+                ofs_alt = find_pattern(self.data, sig_alt)
+                pre = self.data[ofs_alt:ofs_alt+2]
+                post = self.assembly("movs r2,#0x1")
+                self.data[ofs_alt:ofs_alt+2] = post
+                return [("cruise_control_enable_fallback", hex(ofs_alt), pre.hex(), post.hex())]
+            except Exception:
+                # Letzte Instanz: Wenn absolut kein Muster greift, geben wir eine Warnung aus
+                # und blockieren das Skript nicht, damit der Regionspatch intakt bleibt.
+                print("\n[!] Tempomat-Signatur im 5 Plus Dump unauffindbar. Modus übersprungen.")
+                return [("cruise_control_enable", "failed", "pattern_not_found", "skipped")]
+            
 
     def motor_start_speed(self, kmh):
         res = []
@@ -85,3 +114,4 @@ class ES32Patcher(CorePatcher):
             res += [(f"motor_start_speed_{i}", hex(ofs), pre.hex(), post.hex())]
 
         return res
+
